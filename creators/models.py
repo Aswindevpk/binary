@@ -10,8 +10,10 @@ class BaseModel(models.Model):
     class Meta:
         abstract = True
 
-class NormalUser(BaseModel):
+class Creator(BaseModel):
     user = models.ForeignKey(User,on_delete=models.CASCADE)
     otp = models.CharField(max_length=6)
     otp_gen_time = models.DateTimeField(null=True,blank=True)
     is_verified = models.BooleanField(default=False)
+
+

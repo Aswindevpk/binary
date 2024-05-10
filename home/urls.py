@@ -2,5 +2,7 @@ from django.urls import path
 from .views import *
 
 urlpatterns = [
-    # path('/',RegisterNormalUser.as_view(),name='user_register'),
+    path('blogs/',BlogView.as_view(),name='home_blogs'),
+    path('tags/',TagView.as_view(),name='home_tags'),
+    path('categories/',CategoryView.as_view(),name='home_categories'),
 ]

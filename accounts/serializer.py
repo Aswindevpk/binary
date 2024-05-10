@@ -1,6 +1,5 @@
 from rest_framework import serializers
-from django.contrib.auth.models import User
-from .models import NormalUser
+from accounts.models import CustomUser
 from random import randint
 from .utils import send_otp_email
 from django.contrib.auth.password_validation import validate_password
@@ -10,15 +9,16 @@ class RegisterSerializer(serializers.Serializer):
     username = serializers.CharField()
     email = serializers.EmailField()
     password = serializers.CharField()
+    is_creator = serializers.BooleanField()
 
     def validate(self, data):
         if data['username']:
-            if User.objects.filter(username=data['username']).exists():
+            if CustomUser.objects.filter(username=data['username']).exists():
                 raise serializers.ValidationError("username is taken")
             if len(data['username']) < 3:
                 raise serializers.ValidationError("username should be atleast 3 characters")
         if data['email']:
-            if User.objects.filter(email=data['email']).exists():
+            if CustomUser.objects.filter(email=data['email']).exists():
                 raise serializers.ValidationError("email is taken")
             
         validate_password(data['password'])
@@ -27,15 +27,18 @@ class RegisterSerializer(serializers.Serializer):
     
     def create(self, data):
         # creating main user 
-        user = User.objects.create(username=data['username'],email=data['email'])
+        user = CustomUser.objects.create(username=data['username'],email=data['email'])
         user.set_password(data['password'])
-        user.save()
         #genarate otp
         otp = randint(1000,9999)
         #otp genarated time
         now = timezone.now()
-        normal_user = NormalUser.objects.create(user=user,otp=str(otp),otp_gen_time=now)
-        normal_user.save()
+        user.otp = otp
+        user.otp_gen_time = now
+        if data['is_creator']:
+            user.is_creator = True
+        user.is_creator = False
+        user.save()
         # senting the created otp to user email 
         # send_otp_email(email=data['email'],otp=otp)
         return data
@@ -50,4 +53,11 @@ class GenarateOTPSerializer(serializers.Serializer):
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField()
     password = serializers.CharField()
+
+class ResetPassSerializer(serializers.Serializer):
+    password = serializers.CharField()
+
+    def validate(self, data):  
+        validate_password(data['password'])
+        return data
 

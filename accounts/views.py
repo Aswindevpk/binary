@@ -2,17 +2,19 @@ from .serializer import *
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .models import NormalUser, User
+from .models import PasswordReset, CustomUser
 from django.utils import timezone
+from .utils import generate_token, send_password_reset_email
 from datetime import timedelta
 from random import randint
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.permissions import IsAuthenticated
+from django.urls import reverse
 
 
-class RegisterNormalUser(APIView):
+class RegisterUser(APIView):
     def post(self,request):
         try:
             data = request.data 
@@ -27,7 +29,7 @@ class RegisterNormalUser(APIView):
         except:
             return Response({'status':False, 'message':"error occured"}, status.HTTP_400_BAD_REQUEST)
 
-class VerifyOTPNormalUser(APIView):
+class VerifyOTPUser(APIView):
     def post(self,request):
         try:
             data = request.data
@@ -38,31 +40,30 @@ class VerifyOTPNormalUser(APIView):
                     'message':serializer.errors
                     }, status.HTTP_400_BAD_REQUEST)
             else:
-                user = User.objects.get(email=data['email'])
+                user = CustomUser.objects.get(email=data['email'])
                 if not user:
                         return Response({
                         'status':False,
                         'message':'no user found'
                         }, status.HTTP_404_NOT_FOUND)
                 
-                normal_user = NormalUser.objects.get(user=user)
-                if normal_user.is_verified:
+                if user.is_verified:
                         return Response({
                         'status':False,
                         'message':'email already verified'
                         }, status.HTTP_406_NOT_ACCEPTABLE)
                 
                 #time of join of the user
-                created = normal_user.otp_gen_time
+                created = user.otp_gen_time
                 #current time
                 now = timezone.now() 
                 #time difference
                 time_difference = now - created
                 #time difference should not be greater than 5 min
                 if time_difference < timedelta(minutes=5):
-                    if data['otp'] == normal_user.otp:
-                        normal_user.is_verified = True
-                        normal_user.save()
+                    if data['otp'] == user.otp:
+                        user.is_verified = True
+                        user.save()
                         return Response({
                         'status':True,
                         'message':'email verified'
@@ -82,7 +83,7 @@ class VerifyOTPNormalUser(APIView):
         except:
             return Response({'status':False, 'message':serializer.errors}, status.HTTP_400_BAD_REQUEST)
 
-class GenarateOTPNormalUser(APIView):
+class GenarateOTPUser(APIView):
     def post(self, request):
         try:
             data = request.data 
@@ -93,17 +94,16 @@ class GenarateOTPNormalUser(APIView):
                         'message':serializer.errors
                         }, status.HTTP_400_BAD_REQUEST)
             
-            user = User.objects.get(email=data['email'])
-            normal_user = NormalUser.objects.get(user=user)
+            user = CustomUser.objects.get(email=data['email'])
 
-            if normal_user.is_verified:
+            if user.is_verified:
                 return Response({
                 'status':False,
                 'message':'email already verified'
                 }, status.HTTP_406_NOT_ACCEPTABLE)
                 
             #time of join of the user
-            created = normal_user.otp_gen_time
+            created = user.otp_gen_time
             #current time
             now = timezone.now() 
             #time difference
@@ -113,9 +113,9 @@ class GenarateOTPNormalUser(APIView):
             if time_difference > timedelta(minutes=5):
                 #change otp and time
                 otp = randint(1000,9999) 
-                normal_user.otp = otp
-                normal_user.otp_gen_time = timezone.now()
-                normal_user.save()
+                user.otp = otp
+                user.otp_gen_time = timezone.now()
+                user.save()
                 #sent new email
                 #send_otp_email(email=data['email'],otp=otp)
                 return Response({
@@ -134,7 +134,7 @@ class GenarateOTPNormalUser(APIView):
                 'message':serializer.errors
                 }, status.HTTP_400_BAD_REQUEST)
 
-class LoginNormalUser(APIView):
+class LoginUser(APIView):
     def post(self,request):
         data = request.data 
         serializer = LoginSerializer(data= data)
@@ -143,8 +143,6 @@ class LoginNormalUser(APIView):
                 'status':False,
                 'message':serializer.errors
                 }, status.HTTP_400_BAD_REQUEST)
-        
-        
         user= authenticate(username=serializer.data['username'],password=serializer.data['password'])
         if not user :
             return Response({
@@ -152,11 +150,9 @@ class LoginNormalUser(APIView):
                 'message':"invalid credentials"
                 }, status.HTTP_400_BAD_REQUEST)
         
-        usr_obj = User.objects.get(username=data['username'])
+        user = CustomUser.objects.get(username=data['username'])
 
-        normal_user = NormalUser.objects.get(user=usr_obj)
-
-        if not normal_user.is_verified:
+        if not user.is_verified:
             return Response({
                 'status':False,
                 'message':"email not verified"
@@ -169,6 +165,72 @@ class LoginNormalUser(APIView):
                          'refresh': str(refresh),
                           'access': str(refresh.access_token),
                          }, status.HTTP_201_CREATED)
+
+class LogoutUser(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            refresh_token = request.data["refresh_token"]
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+
+            return Response(status=status.HTTP_205_RESET_CONTENT)
+        except Exception as e:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+
+class ForgotPassUser(APIView):
+    def post(self,request):
+        email = request.data['email']
+        user = CustomUser.objects.filter(email=email).first()
+        if not user:
+            return Response({
+            'status':False,
+            'message':"no user found with the given email"
+            }, status.HTTP_404_NOT_FOUND)
+        reset_user = PasswordReset.objects.filter(user=user).first()
+        if reset_user:
+            return Response({
+            'status':False,
+            'message':"link already sent to email"
+            }, status.HTTP_404_NOT_FOUND)
+        
+        token = generate_token()
+        PasswordReset.objects.create(user=user,token=token)
+        # send_password_reset_email(user.email, token)
+        reset_url = reverse('user_forgot_pass_confirm', kwargs={'token': token})
+        reset_link = request.build_absolute_uri(reset_url)
+        return Response({
+            'status':True,
+            "reset_link":reset_link
+        })
+
+class ForgotPassConfirmUser(APIView):
+    def post(self, request, token):
+        reset_token = PasswordReset.objects.filter(token=token).first()
+        if not reset_token:
+            return Response({
+            'status':False,
+            "message":"reset_link invalid"
+            })
+        user = User.objects.filter(id=reset_token.user.id).first()
+        data = request.data
+        serializer = ResetPassSerializer(data=data)
+        if not serializer.is_valid():
+            return Response({
+            'status':False,
+            "message":serializer.errors
+            })
+        
+        user.set_password(serializer.data["password"])
+        user.save()
+        reset_token.delete()
+        return Response({
+            'status':True,
+            "message":"password reseted "
+        })
+
+
 
 
 class Test(APIView):

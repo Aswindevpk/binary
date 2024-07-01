@@ -10,9 +10,8 @@ urlpatterns = [
     path('login/refresh/',TokenRefreshView.as_view(),name='user_token_refresh'),
     path('logout/',LogoutUser.as_view(),name='user_logout'),
     path('forgot_password/',ForgotPassUser.as_view(),name='user_forgot_pass'),
-    path('forgot_password_confirm/<str:token>/',ForgotPassConfirmUser.as_view(),name='user_forgot_pass_confirm'),
-
-    path('test/',Test.as_view(),name='test'),
-
-
+    path('forgot_password_confirm/',ForgotPassConfirmUser.as_view(),name='user_forgot_pass_confirm'),
+    path('reset_password/',ResetPassUser.as_view(),name='user_reset_password'),
+    path('create_order/', CreateOrderAPIView.as_view(), name='create_order'),
+    path('verify_payment/', VerifyPaymentAPIView.as_view(), name='verify_payment'),
 ]

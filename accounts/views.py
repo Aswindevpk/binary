@@ -2,7 +2,7 @@ from .serializer import *
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .models import PasswordReset, CustomUser
+from .models import PasswordReset, CustomUser,SubscriptionPlan,PremiumSubscription
 from django.utils import timezone
 from .utils import generate_token, send_password_reset_email
 from datetime import timedelta
@@ -12,7 +12,73 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.permissions import IsAuthenticated
 from django.urls import reverse
+import razorpay
+from django.conf import settings
 
+client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+
+
+class CreateOrderAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        amount = request.data.get('amount')
+        currency = 'INR'
+        payment = Payment.objects.create(user=request.user, amount=amount)
+        
+        razorpay_order = client.order.create(dict(amount=int(amount)*100, currency=currency, payment_capture='1'))
+        
+        payment.razorpay_order_id = razorpay_order['id']
+        payment.save()
+        
+        return Response({
+            'order_id': razorpay_order['id'],
+            'amount': amount,
+            'currency': currency,
+            'key': settings.RAZORPAY_KEY_ID,
+            'name': "Your Blog",
+            'description': "Blog Subscription",
+        }, status=status.HTTP_201_CREATED)
+
+class VerifyPaymentAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        razorpay_order_id = request.data.get('razorpay_order_id')
+        razorpay_payment_id = request.data.get('razorpay_payment_id')
+        razorpay_signature = request.data.get('razorpay_signature')
+        
+        try:
+            payment = Payment.objects.get(razorpay_order_id=razorpay_order_id)
+        except Payment.DoesNotExist:
+            return Response({'status': 'Payment record not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        params_dict = {
+            'razorpay_order_id': razorpay_order_id,
+            'razorpay_payment_id': razorpay_payment_id,
+            'razorpay_signature': razorpay_signature
+        }
+        
+        try:
+            client.utility.verify_payment_signature(params_dict)
+            payment.razorpay_payment_id = razorpay_payment_id
+            payment.razorpay_signature = razorpay_signature
+            payment.is_paid = True
+            payment.save()
+            # creating premium subsciption for user 
+            plan = SubscriptionPlan.objects.get(price=payment.amount)
+            current_datetime = timezone.now()
+
+            new_plan = PremiumSubscription.objects.create(
+                subscription_plan=plan,
+                user=payment.user,
+                subscription_end=current_datetime + timedelta(days=plan.duration_days)
+            )
+            return Response({'status': 'Payment successful'}, status=status.HTTP_200_OK)
+        except:
+            return Response({'status': 'Payment verification failed'}, status=status.HTTP_400_BAD_REQUEST)
+
+# authentication and related 
 
 class RegisterUser(APIView):
     def post(self,request):
@@ -141,13 +207,15 @@ class LoginUser(APIView):
         if not serializer.is_valid():
             return Response({
                 'status':False,
-                'message':serializer.errors
+                'message':serializer.errors,
+                'verified':True
                 }, status.HTTP_400_BAD_REQUEST)
         user= authenticate(username=serializer.data['username'],password=serializer.data['password'])
         if not user :
             return Response({
                 'status':False,
-                'message':"invalid credentials"
+                'message':"Incorrect username or password.",
+                'verified':True
                 }, status.HTTP_400_BAD_REQUEST)
         
         user = CustomUser.objects.get(username=data['username'])
@@ -155,45 +223,62 @@ class LoginUser(APIView):
         if not user.is_verified:
             return Response({
                 'status':False,
-                'message':"email not verified"
+                'message':"email not verified",
+                'verified':False,
+                'email':user.email
             }, status.HTTP_400_BAD_REQUEST)
-
-
         refresh = RefreshToken.for_user(user)
+        refresh['username'] = user.username
         return Response({'status':True, 
                          'message':'user login',
                          'refresh': str(refresh),
-                          'access': str(refresh.access_token),
-                         }, status.HTTP_201_CREATED)
+                          'access': str(refresh.access_token)
+                         }, status.HTTP_200_OK)
 
 class LogoutUser(APIView):
-    permission_classes = (IsAuthenticated,)
-
     def post(self, request):
         try:
-            refresh_token = request.data["refresh_token"]
-            token = RefreshToken(refresh_token)
+            data = request.data
+            serializer = LogoutSerializer(data=data)
+            if not serializer.is_valid():
+                return Response({
+                'status':False,
+                'message':serializer.errors
+                }, status.HTTP_400_BAD_REQUEST)
+            token = RefreshToken(serializer.data['refresh'])
             token.blacklist()
-
-            return Response(status=status.HTTP_205_RESET_CONTENT)
+            return Response({
+                'status':True,
+                'message':"Logged out"
+                },status=status.HTTP_205_RESET_CONTENT)
         except Exception as e:
-            return Response(status=status.HTTP_400_BAD_REQUEST)
+            return Response({
+                'status':False,
+                'message':"logout failure"
+            },status=status.HTTP_400_BAD_REQUEST)
 
 class ForgotPassUser(APIView):
     def post(self,request):
-        email = request.data['email']
-        user = CustomUser.objects.filter(email=email).first()
+        data = request.data
+        serializer = ForgotPassSerializer(data=data)
+        if not serializer.is_valid():
+            return Response({
+            'status':False,
+            'message':serializer.errors
+            }, status.HTTP_400_BAD_REQUEST)
+        
+        user = CustomUser.objects.filter(email=serializer.data['email']).first()
         if not user:
             return Response({
             'status':False,
-            'message':"no user found with the given email"
+            'message':f"Account with email '{serializer.data['email']}' not found."
             }, status.HTTP_404_NOT_FOUND)
         reset_user = PasswordReset.objects.filter(user=user).first()
         if reset_user:
             return Response({
             'status':False,
             'message':"link already sent to email"
-            }, status.HTTP_404_NOT_FOUND)
+            }, status.HTTP_200_OK)
         
         token = generate_token()
         PasswordReset.objects.create(user=user,token=token)
@@ -202,43 +287,68 @@ class ForgotPassUser(APIView):
         reset_link = request.build_absolute_uri(reset_url)
         return Response({
             'status':True,
-            "reset_link":reset_link
-        })
+            "message":"link sent to email"
+        },status.HTTP_200_OK)
 
 class ForgotPassConfirmUser(APIView):
-    def post(self, request, token):
+    def post(self, request):
+        data = request.data
+        serializer = ForgotPassConfirmSerializer(data=data)
+        if not serializer.is_valid():
+            return Response({
+            'status':False,
+            'message':serializer.errors
+            }, status.HTTP_400_BAD_REQUEST)
+        
+        token = serializer.data['token']
         reset_token = PasswordReset.objects.filter(token=token).first()
         if not reset_token:
             return Response({
             'status':False,
             "message":"reset_link invalid"
-            })
-        user = User.objects.filter(id=reset_token.user.id).first()
+            },status.HTTP_400_BAD_REQUEST)
+        
+        return Response({
+            'status':True,
+            "message":"reset your password"
+        },status.HTTP_200_OK)
+    
+class ResetPassUser(APIView):
+    def post(self, request):
         data = request.data
         serializer = ResetPassSerializer(data=data)
         if not serializer.is_valid():
             return Response({
             'status':False,
             "message":serializer.errors
-            })
-        
-        user.set_password(serializer.data["password"])
-        user.save()
-        reset_token.delete()
-        return Response({
-            'status':True,
-            "message":"password reseted "
-        })
+        },status.HTTP_400_BAD_REQUEST)
+        token = serializer.data['token']
+        if not token:
+            return Response({
+            'status':False,
+            "message":"token invalid"
+            },status.HTTP_200_OK)
+        try:
+            reset_token = PasswordReset.objects.filter(token=token).first()
+            if not reset_token:
+                return Response({
+                'status':False,
+                "message":"token invalid"
+                },status.HTTP_200_OK)
+            user = CustomUser.objects.filter(id=reset_token.user.id).first()
+            
+            user.set_password(serializer.data["password"])
+            user.save()
+            reset_token.delete()
+            return Response({
+                'status':True,
+                "message":"password reseted"
+            },status.HTTP_200_OK)
+        except:
+            return Response({
+            'status':False,
+            "message":"token error"
+            },status.HTTP_400_BAD_REQUEST)
 
 
-
-
-class Test(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
-
-    def get(request, data):
-        utc_time = timezone.now()
-
-        return Response({"message":"test success"})
 

@@ -6,6 +6,7 @@ from datetime import timedelta
 
 class CustomUser(AbstractUser):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    about = models.TextField(blank=True)
     otp = models.CharField(max_length=6,null=True,blank=True)
     otp_gen_time = models.DateTimeField(null=True,blank=True)
     is_verified = models.BooleanField(default=False,null=True,blank=True)

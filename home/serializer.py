@@ -32,7 +32,7 @@ class HomeBlogSerializer(serializers.ModelSerializer):
 
     class Meta:
         model=Blog
-        fields=('slug', 'title', 'content', 'clap_count', 'comment_count','created_at','author')
+        fields=('uid', 'title', 'content', 'clap_count', 'comment_count','created_at','author')
         
     def get_comment_count(self, obj):
         return obj.comments.count()    # Ensure 'comments' is the related name
@@ -42,6 +42,7 @@ class HomeBlogSerializer(serializers.ModelSerializer):
     
     def get_author(self,obj):
         return obj.author_id.username
+    
     
 class CommentSerializer(serializers.ModelSerializer):
     user = serializers.SlugRelatedField(slug_field='username',queryset=CustomUser.objects.all())

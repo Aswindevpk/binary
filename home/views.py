@@ -10,6 +10,8 @@ from django.conf import settings
 from rest_framework import generics
 
 class UserView(generics.ListAPIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
     serializer_class= UserSerializer
     
     def get_queryset(self):
@@ -17,6 +19,8 @@ class UserView(generics.ListAPIView):
         return CustomUser.objects.filter(is_active=True,is_staff=False,is_verified=True).order_by('?')[:5]
 
 class CategoryBlogListView(generics.ListAPIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
     serializer_class = HomeBlogSerializer
     
     def get_queryset(self):
@@ -24,19 +28,21 @@ class CategoryBlogListView(generics.ListAPIView):
         return Blog.objects.filter(published=True,category_id=category_id)
     
 class RecentBlogListView(generics.ListAPIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
     serializer_class = RecentBlogSerializer
     
     def get_queryset(self):
         return Blog.objects.order_by('-created_at')[:4]  # recent blogs
 
 class BlogView(APIView):
-    # authentication_classes = [JWTAuthentication]
-    # permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
 
-    def get(self, request,slug=None):
+    def get(self, request,id=None):
         #return blog along with comments
         try:
-            blog = Blog.objects.get(slug=slug)
+            blog = Blog.objects.get(uid=id)
             blog_serializer = BlogSerializer(blog)
             return Response({
                     "status":True,
@@ -88,6 +94,9 @@ class BlogView(APIView):
     
     
 class TagView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    
     def get(self,request):
         random_tags = Tag.objects.order_by('?')[:5]  # Fetch 5 random tags from the database
         serializer = TagSerializer(random_tags, many=True)
@@ -97,6 +106,9 @@ class TagView(APIView):
         },status.HTTP_200_OK)
     
 class CategoryView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    
     def get(self,request):
         categories = Category.objects.all()
         serializer = CategorySerializer(categories, many=True)

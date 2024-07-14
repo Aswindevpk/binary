@@ -210,13 +210,15 @@ class LoginUser(APIView):
                 'message':serializer.errors,
                 'verified':True
                 }, status.HTTP_400_BAD_REQUEST)
+        
         user= authenticate(username=serializer.data['username'],password=serializer.data['password'])
+
         if not user :
             return Response({
                 'status':False,
                 'message':"Incorrect username or password.",
                 'verified':True
-                }, status.HTTP_400_BAD_REQUEST)
+                }, status.HTTP_401_UNAUTHORIZED)
         
         user = CustomUser.objects.get(username=data['username'])
 
@@ -227,7 +229,9 @@ class LoginUser(APIView):
                 'verified':False,
                 'email':user.email
             }, status.HTTP_400_BAD_REQUEST)
+        
         refresh = RefreshToken.for_user(user)
+        
         refresh['username'] = user.username
         return Response({'status':True, 
                          'message':'user login',
@@ -245,16 +249,16 @@ class LogoutUser(APIView):
                 'status':False,
                 'message':serializer.errors
                 }, status.HTTP_400_BAD_REQUEST)
-            token = RefreshToken(serializer.data['refresh'])
+            token = RefreshToken(serializer.validated_data['refresh'])
             token.blacklist()
             return Response({
                 'status':True,
                 'message':"Logged out"
-                },status=status.HTTP_205_RESET_CONTENT)
+                },status=status.HTTP_200_OK)
         except Exception as e:
             return Response({
                 'status':False,
-                'message':"logout failure"
+                'message':e
             },status=status.HTTP_400_BAD_REQUEST)
 
 class ForgotPassUser(APIView):
@@ -268,11 +272,13 @@ class ForgotPassUser(APIView):
             }, status.HTTP_400_BAD_REQUEST)
         
         user = CustomUser.objects.filter(email=serializer.data['email']).first()
+
         if not user:
             return Response({
             'status':False,
             'message':f"Account with email '{serializer.data['email']}' not found."
             }, status.HTTP_404_NOT_FOUND)
+        
         reset_user = PasswordReset.objects.filter(user=user).first()
         if reset_user:
             return Response({

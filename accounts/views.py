@@ -92,6 +92,7 @@ class RegisterUser(APIView):
                     }, status.HTTP_400_BAD_REQUEST)
             serializer.save()
             return Response({'status':True, 'message':'user created'}, status.HTTP_201_CREATED)
+    
         except:
             return Response({'status':False, 'message':"error occured"}, status.HTTP_400_BAD_REQUEST)
 

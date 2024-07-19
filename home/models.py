@@ -1,65 +1,61 @@
 from django.db import models
 from accounts.models import BaseModel
 from accounts.models import CustomUser 
-from autoslug import AutoSlugField
 
 
-class Category(BaseModel):
+class Topic(BaseModel):
     name = models.CharField(max_length=200)
-    slug = AutoSlugField(populate_from='name',unique=True,always_update=True)
 
     def __str__(self):
         return self.name
-
-class Tag(BaseModel):
-    name = models.CharField(max_length=200)
-    slug = AutoSlugField(populate_from='name',unique=True,always_update=True)
-
-    def __str__(self):
-        return self.name
-
-
-class Blog(BaseModel):
-    author_id = models.ForeignKey(CustomUser,on_delete=models.CASCADE)
+    
+    
+class Article(BaseModel):
+    author = models.ForeignKey(CustomUser,on_delete=models.CASCADE)
     title = models.CharField(max_length=200)
+    subtitle = models.CharField(max_length=200,blank=True,null=True)
+    image = models.ImageField(upload_to="media/images")
     content = models.TextField()
-    slug = AutoSlugField(populate_from='uid',unique=True,default=None)
-    category_id = models.ForeignKey(Category,on_delete=models.CASCADE,blank=True,null=True,default=None)
-    published = models.BooleanField(default=False)
+    topics = models.ManyToManyField(Topic,related_name='articles')
+    is_published = models.BooleanField(default=False)
 
     def __str__(self):
         return self.title
-    
-class BlogTags(BaseModel):
-    blog_id = models.ForeignKey(Blog,on_delete=models.CASCADE)
-    tag_id = models.ForeignKey(Tag,on_delete=models.CASCADE)
-    
+
+class Bookmark(BaseModel):
+    user = models.ForeignKey(CustomUser, related_name='bookmarks', on_delete=models.CASCADE)
+    article = models.ForeignKey(Article, related_name='bookmarks', on_delete=models.CASCADE)
+    bookmarked_at = models.DateTimeField(auto_now_add=True)
+
     def __str__(self):
-        return f"{self.blog_id} {self.tag_id}"
+        return f"{self.user.username} bookmarked {self.article.title}"
+
     
     
 class Comment(BaseModel):
-    author_id = models.ForeignKey(CustomUser,on_delete=models.CASCADE)
-    blog_id = models.ForeignKey(Blog, related_name='comments', on_delete=models.CASCADE)
+    author = models.ForeignKey(CustomUser, related_name='comments',on_delete=models.CASCADE)
+    article = models.ForeignKey(Article, related_name='comments', on_delete=models.CASCADE)
     content = models.TextField()
 
     def __str__(self):
         return self.content
     
-class Claps(BaseModel):
-    blog_id = models.ForeignKey(Blog,related_name='claps', on_delete=models.CASCADE)
-    user_id = models.ForeignKey(CustomUser,on_delete=models.CASCADE)
+class Clap(BaseModel):
+    article = models.ForeignKey(Article,related_name='claps', on_delete=models.CASCADE)
+    user = models.ForeignKey(CustomUser, related_name='claps' ,on_delete=models.CASCADE)
+
+    class Meta:
+        unique_together = ('user', 'article')
     
-class Followers(BaseModel):
+class Follow(BaseModel):
    follower = models.ForeignKey(CustomUser, related_name='following', on_delete=models.CASCADE)
    followed = models.ForeignKey(CustomUser, related_name='followers', on_delete=models.CASCADE)
-    
-class Views(BaseModel):
-    blog_id = models.ForeignKey(Blog,on_delete=models.CASCADE)
-    user_id = models.ForeignKey(CustomUser,on_delete=models.CASCADE)
+
+   class Meta:
+        unique_together = ('follower', 'followed')
 
 
-class UploadedImage(models.Model):
+class BlogImage(models.Model):
     image = models.ImageField(upload_to='images/')
     uploaded_at = models.DateTimeField(auto_now_add=True)
 

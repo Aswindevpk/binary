@@ -1,3 +1,4 @@
+from django.forms import ValidationError
 from .serializer import *
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -6,131 +7,316 @@ from .models import *
 from accounts.models import *
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.permissions import IsAuthenticated
-from django.conf import settings
-from rest_framework import generics
+from rest_framework.decorators import api_view
 
-class UserView(generics.ListAPIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
-    serializer_class= UserSerializer
-    
-    def get_queryset(self):
-        #select 5 users who is active
-        return CustomUser.objects.filter(is_active=True,is_staff=False,is_verified=True).order_by('?')[:5]
+class ListArticleView(APIView):
+    # authentication_classes = [JWTAuthentication]
+    # permission_classes = [IsAuthenticated]
 
-class CategoryBlogListView(generics.ListAPIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
-    serializer_class = HomeBlogSerializer
-    
-    def get_queryset(self):
-        category_id = self.kwargs['category_id']
-        return Blog.objects.filter(published=True,category_id=category_id)
-    
-class RecentBlogListView(generics.ListAPIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
-    serializer_class = RecentBlogSerializer
-    
-    def get_queryset(self):
-        return Blog.objects.order_by('-created_at')[:4]  # recent blogs
+    def get(self,request):
+        topic = request.GET.get('topic')
+        if topic:
+            articles = Article.objects.filter(topics__name=topic).distinct()
+        else:
+          articles = Article.objects.all()
 
-class BlogView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
+        serializer = ListArticleSerializer(articles,many=True)
+        return Response({
+                    "status":True,
+                    "data":serializer.data
+                    },status.HTTP_200_OK)
+    
+    def post(self, request):
+        try:
+            serializer = ArticleSerializer(data=request.data)
+            if serializer.is_valid():
+                article = serializer.save()
+                return Response({'id': article.uid, 'message': 'Blog created successfully!'}, status=status.HTTP_201_CREATED)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        except Article.DoesNotExist:
+            return Response({'error': 'No article found !'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ArticleDetailView(APIView):
+    # authentication_classes = [JWTAuthentication]
+    # permission_classes = [IsAuthenticated]
 
     def get(self, request,id=None):
-        #return blog along with comments
         try:
-            blog = Blog.objects.get(uid=id)
-            blog_serializer = BlogSerializer(blog)
+            article = Article.objects.get(uid=id)
+            serializer = ListArticleSerializer(article)
             return Response({
                     "status":True,
                     "data":{
-                    "blog":blog_serializer.data,
+                    "article":serializer.data,
             }},status.HTTP_200_OK)
                 
-        except Blog.DoesNotExist:
-            return Response({'error': 'Blog not found'}, status=status.HTTP_404_NOT_FOUND)
-        
-    def post(self,request,*args, **kwargs):
-        serializer = BlogSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response({
-                    'status':False,
-                    'message':serializer.errors,
-                    'verified':True
-                }, status.HTTP_400_BAD_REQUEST)
-        blog = serializer.save()
-        BlogId = blog.uid
-        return Response({
-            "status":True,
-            'message':'blog created',
-            'BlogId':BlogId
-        },status=status.HTTP_201_CREATED)
-        
+        except ValidationError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Article.DoesNotExist:
+            return Response({'error': 'No article found !'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     def patch(self,request,id=None):
         #updates the blog
         try:
-            blog=Blog.objects.get(uid=id)
-        except Blog.DoesNotExist:
-            return Response({'error': 'Blog not found'}, status=status.HTTP_404_NOT_FOUND)
+            article=Article.objects.get(uid=id)
+            serializer = ArticleSerializer(article, data=request.data, partial=True)
+            if serializer.is_valid():
+                updated_article = serializer.save()
+                return Response({'id': updated_article.uid, 'message': 'Blog updated successfully!'}, status=status.HTTP_200_OK)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        except Article.DoesNotExist:
+            return Response({'error': 'No article found !'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-        serializer = BlogSerializer(blog, data=request.data, partial=True)
-        if serializer.is_valid():
-            updated_blog = serializer.save()
-            return Response({'slug': updated_blog.slug, 'message': 'Blog updated successfully!'}, status=status.HTTP_202_ACCEPTED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def delete(self,request,slug=None):
+    def delete(self,request,id=None):
         try:
-            blog = Blog.objects.get(slug=slug)
-        except Blog.DoesNotExist:
+            article = Article.objects.get(uid=id)
+            article.delete()
+            return Response({'message': 'Blog deleted successfully!'}, status=status.HTTP_200_OK)
+        except Article.DoesNotExist:
             return Response({'error': 'Blog not found'}, status=status.HTTP_404_NOT_FOUND)
-
-        blog.delete()
-        return Response({'message': 'Blog deleted successfully!'}, status=status.HTTP_204_NO_CONTENT)
     
     
-class TagView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
+class TopicView(APIView):
+    # authentication_classes = [JWTAuthentication]
+    # permission_classes = [IsAuthenticated]
     
     def get(self,request):
-        random_tags = Tag.objects.order_by('?')[:5]  # Fetch 5 random tags from the database
-        serializer = TagSerializer(random_tags, many=True)
-        return Response({
-            "status":True,
-            "data":serializer.data
-        },status.HTTP_200_OK)
+        try:
+            limit = int(request.GET.get('limit'))
+            if limit:
+                topics = Topic.objects.order_by("?")[:limit]
+            else:
+                topics = Topic.objects.all()
+            serializer = TopicSerializer(topics, many=True)
+            return Response({
+                "status":True,
+                "data":serializer.data
+            },status.HTTP_200_OK)
+        
+        except Topic.DoesNotExist:
+            return Response({'error': 'No topics found !'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-class CategoryView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
-    
-    def get(self,request):
-        categories = Category.objects.all()
-        serializer = CategorySerializer(categories, many=True)
-
-        return Response({
-            "status":True,
-            "data":serializer.data
-        },status.HTTP_200_OK)
-
 
 class ProfileView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
+    # authentication_classes = [JWTAuthentication]
+    # permission_classes = [IsAuthenticated]
+
+    def get(self,request):
+        try:
+            id = request.user.id            # take user id from the request
+            user = CustomUser.objects.get(id=id)
+            serializer = UserSerializer(user)
+            return Response({
+                "status":True,
+                "data":serializer.data
+            },status.HTTP_200_OK)
+        except CustomUser.DoesNotExist:
+            return Response({'error': 'No topics found !'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)    
+
 
     def post(self,request):
-        id = request.data['id']
-        user = CustomUser.objects.get(id=id)
-        serializer = UserSerializer(user)
-        return Response({
-            "status":True,
-            "data":serializer.data
-        },status.HTTP_200_OK)
+        try:
+            id = request.data['id']
+            user = CustomUser.objects.get(id=id)
+            serializer = UserSerializer(user)
+            if serializer.is_valid():
+                return Response({
+                    "status":True,
+                    "data":serializer.data
+                },status.HTTP_200_OK)
+            return Response({
+                    "status":False,
+                    "data":serializer.errors
+            },status.HTTP_400_BAD_REQUEST)
+        except CustomUser.DoesNotExist:
+            return Response({'error': 'No user found !'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)   
+
+    def patch(self,request):
+        #updates the blog
+        try:
+            id = request.user.id
+            user=CustomUser.objects.get(id=id)
+            serializer = UserSerializer(user, data=request.data, partial=True)
+            if serializer.is_valid():
+                updated_user = serializer.save()
+                return Response({'id': updated_user.uid, 'message': 'profile updated successfully!'}, status=status.HTTP_200_OK)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        except CustomUser.DoesNotExist:
+            return Response({'error': 'No user found !'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ListCommentView(APIView):
+    # authentication_classes = [JWTAuthentication]
+    # permission_classes = [IsAuthenticated]
+
+    def get(self,request,id=None):
+        try:
+            comments = Comment.objects.filter(article__id=id)
+            serializer = CommentSerializer(comments, many=True)
+            return Response({
+                "status":True,
+                "data":serializer.data
+            },status.HTTP_200_OK)
+        
+        except Comment.DoesNotExist:
+            return Response({'error': 'No comment Found !'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+    def post(self,request,id=None):
+        try:
+            serializer = CommentSerializer(request.data)
+            if serializer.is_valid():
+                comment = serializer.save()
+                return Response({
+                    "status":True,
+                    "data":{
+                        "uid": comment.uid
+                    }
+                },status.HTTP_201_CREATED)
+            return Response({
+                "status":False,
+                "data":serializer.errors
+            },status.HTTP_400_BAD_REQUEST)
+        
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CommentView(APIView):
+    # authentication_classes = [JWTAuthentication]
+    # permission_classes = [IsAuthenticated]
+
+    def post(self,request,id=None):
+        try:
+            comments = Comment.objects.filter(article__id=id)
+            serializer = CommentSerializer(comments, many=True)
+            return Response({
+                "status":True,
+                "data":serializer.data
+            },status.HTTP_200_OK)
+        
+        except Comment.DoesNotExist:
+            return Response({'error': 'No comment Found !'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+def ArticleClap(request,id):
+    if request.method == 'POST':
+        try:
+            user = CustomUser.objects.get(id=request.user.id)
+            article = Article.objects.get(uid=id)
+
+            clap,created = Clap.objects.get_or_create(article=article,user=user)
+
+            if created:
+                return Response({
+                "status":True,
+                "message": "Clap added successfully"
+                },status.HTTP_201_CREATED)
+            else:
+                return Response({
+                "status":False,
+                "message": "You have already clapped for this article"
+                },status.HTTP_409_CONFLICT)
+
+        except CustomUser.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Article.DoesNotExist:
+            return Response({'error': 'Article not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+def FollowAuthor(request,id):
+    if request.method == 'POST':
+        try:
+            user = CustomUser.objects.get(id=request.user.id)
+            author_to_follow = CustomUser.objects.get(id=id)
+
+            follow,created = Follow.objects.get_or_create(follower=user,followed=author_to_follow)
+
+            if created:
+                return Response({
+                "status":True,
+                "message": f"You have started following {author_to_follow.username}"
+                },status.HTTP_201_CREATED)
+            else:
+                return Response({
+                "status":False,
+                "message": "You have already followed The author before !"
+                },status.HTTP_409_CONFLICT)
+
+        except CustomUser.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+def ListAuthors(request):
+    if request.method == 'GET':
+        try:
+            authors = CustomUser.objects.exclude(id=request.user.id)
+            serializer = UserSerializer(authors,many=True)
+            if serializer.is_valid():
+                return Response({
+                "status":True,
+                "data": serializer.data
+                },status.HTTP_200_OK)
+            return Response({
+                "status":False,
+                "data": serializer.errors
+            },status.HTTP_409_CONFLICT)
+
+        except CustomUser.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+def AuthorDetails(request,id):
+     if request.method == 'GET':
+        try:
+            author = CustomUser.objects.exclude(id=id)
+            serializer = UserSerializer(author)
+            if serializer.is_valid():
+                return Response({
+                "status":True,
+                "data": serializer.data
+                },status.HTTP_200_OK)
+            return Response({
+                "status":False,
+                "data": serializer.errors
+            },status.HTTP_409_CONFLICT)
+
+        except CustomUser.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class PlansView(APIView):
     permission_classes = [IsAuthenticated]

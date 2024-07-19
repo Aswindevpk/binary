@@ -44,7 +44,7 @@ class PremiumSubscription(BaseModel):
     subscription_end = models.DateTimeField(blank=True, null=True)
 
     def __str__(self):
-        return f"{self.subscription_plan.name} Subscription for {self.user}"
+        return f"{self.subscription_plan} Subscription for {self.user}"
 
     def save(self, *args, **kwargs):
         if not self.subscription_end:

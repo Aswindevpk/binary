@@ -49,6 +49,11 @@ class OTPVerifySerializer(serializers.Serializer):
     email = serializers.EmailField()
     otp = serializers.CharField()
 
+    def to_internal_value(self, data):
+        if "otp" in data:
+            data["otp"] = str(data["otp"])
+        return super().to_internal_value(data)
+
 class GenarateOTPSerializer(serializers.Serializer):
     email = serializers.EmailField()
 

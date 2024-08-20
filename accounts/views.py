@@ -100,6 +100,7 @@ class VerifyOTPUser(APIView):
     def post(self,request):
         try:
             data = request.data
+            print(data)
             serializer = OTPVerifySerializer(data=data)
             if not serializer.is_valid():
                 return Response({
@@ -147,8 +148,8 @@ class VerifyOTPUser(APIView):
                     'message':'otp timeout'
                     }, status.HTTP_406_NOT_ACCEPTABLE)
 
-        except:
-            return Response({'status':False, 'message':serializer.errors}, status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({'status':False, 'message':str(e)}, status.HTTP_400_BAD_REQUEST)
 
 class GenarateOTPUser(APIView):
     def post(self, request):

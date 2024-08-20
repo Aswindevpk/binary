@@ -9,8 +9,9 @@ urlpatterns = [
     # path('article/<str:id>/comment/',CommentView.as_view(),name='comment_article'),
     path('article/<str:id>/clap/',ArticleClap,name='clap_article'), # type: ignore
     path('follow/<str:id>/',FollowAuthor,name='follow_author'),
+    path('unfollow/<str:id>/',UnFollowAuthor,name='unfollow_author'),
     path('authors/',ListAuthors,name='author_list'),
-    path('authors/<str:id>/',AuthorDetails,name='author_list'),
+    path('author/<str:id>/',AuthorDetails,name='author_list'),
     path('profile/',ProfileView.as_view(),name='user_profile'),
     path('plans/',PlansView.as_view(),name='home_plans'),
 

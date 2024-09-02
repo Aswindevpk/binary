@@ -14,6 +14,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.urls import reverse
 import razorpay
 from django.conf import settings
+from django.db import transaction
 
 client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
 
@@ -60,23 +61,28 @@ class VerifyPaymentAPIView(APIView):
         }
         
         try:
-            client.utility.verify_payment_signature(params_dict)
-            payment.razorpay_payment_id = razorpay_payment_id
-            payment.razorpay_signature = razorpay_signature
-            payment.is_paid = True
-            payment.save()
-            # creating premium subsciption for user 
-            plan = SubscriptionPlan.objects.get(price=payment.amount)
-            current_datetime = timezone.now()
+            with transaction.atomic():
+                client.utility.verify_payment_signature(params_dict)
+                payment.razorpay_payment_id = razorpay_payment_id
+                payment.razorpay_signature = razorpay_signature
+                payment.is_paid = True
+                payment.save()
+                
+                # Creating premium subscription for the user
+                plan = SubscriptionPlan.objects.get(price=payment.amount)
+                current_datetime = timezone.now()
 
-            new_plan = PremiumSubscription.objects.create(
-                subscription_plan=plan,
-                user=payment.user,
-                subscription_end=current_datetime + timedelta(days=plan.duration_days)
-            )
-            return Response({'status': 'Payment successful'}, status=status.HTTP_200_OK)
-        except:
-            return Response({'status': 'Payment verification failed'}, status=status.HTTP_400_BAD_REQUEST)
+                new_plan = PremiumSubscription.objects.create(
+                    subscription_plan=plan,
+                    user=payment.user,
+                    subscription_end=current_datetime + timedelta(days=plan.duration_days)
+                )
+                
+                return Response({'status': 'Payment successful'}, status=status.HTTP_200_OK)
+        except razorpay.errors.SignatureVerificationError as e:
+            return Response({'status': 'Payment verification failed', 'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({'status': 'An error occurred', 'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 # authentication and related 
 
@@ -293,6 +299,7 @@ class ForgotPassUser(APIView):
         # send_password_reset_email(user.email, token)
         reset_url = reverse('user_forgot_pass_confirm', kwargs={'token': token})
         reset_link = request.build_absolute_uri(reset_url)
+        
         return Response({
             'status':True,
             "message":"link sent to email"

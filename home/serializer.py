@@ -34,7 +34,6 @@ class ArticleSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
-
 class ListArticleSerializer(serializers.ModelSerializer):
     clap_count=serializers.SerializerMethodField()
     comment_count=serializers.SerializerMethodField()
@@ -53,13 +52,12 @@ class ListArticleSerializer(serializers.ModelSerializer):
     def get_author(self,obj):     
         return { "id":obj.author.id,"username":obj.author.username }
     
-    
 class CommentSerializer(serializers.ModelSerializer):
     author = serializers.SerializerMethodField()
 
     class Meta:
         model = Comment
-        fields = ['author','content','uid']
+        fields = ['author','content','uid','created_at']
 
     def get_author(self,obj):     
         return { "id":obj.author.id,"username":obj.author.username }
@@ -96,10 +94,6 @@ class AuthorSerializer(serializers.ModelSerializer):
         return False
 
     
-
-
-
-
 class SubscriptionPlanSerializer(serializers.ModelSerializer):
     class Meta:
         model = SubscriptionPlan

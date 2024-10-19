@@ -119,7 +119,8 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+# Set the time zone to India/Kolkata
+TIME_ZONE = 'Asia/Kolkata'
 
 USE_I18N = True
 
@@ -148,11 +149,21 @@ EMAIL_HOST_PASSWORD = 'rkuk fpzi mqku twjz'  # Your Gmail password or app-specif
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-    )
+    ),
+    #limits the api request for both anonymous and authenticated users
+        'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle'
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '60/hour',
+        'user': '1000/hour',
+    }
 }
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
 
 
 SIMPLE_JWT = {
@@ -202,6 +213,9 @@ CORS_ORIGIN_WHITELIST = [
     'http://localhost:3000',  # React development server
 ]
 
+
+# URL for frontend password reset link
+FRONTEND_URL = 'http://localhost:3000'
 
 # settings.py
 RAZORPAY_KEY_ID = 'rzp_test_J4Tn8cKg0kxJAF'

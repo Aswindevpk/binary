@@ -7,7 +7,7 @@ class ArticleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Article
-        fields = ['uid','title','subtitle','content','author','image','topics']
+        fields = ['uid','title','subtitle','content','author','image','topics','is_published']
         extra_kwargs = {
             'title': {'required': True},
             'subtitle': {'required': False, 'allow_null': True},
@@ -17,31 +17,15 @@ class ArticleSerializer(serializers.ModelSerializer):
             'author': {'required': True},
         }
 
-    
-    def update(self, instance, validated_data):
-        topics_data = validated_data.pop('topics',None)  # Extract topics data if present
-        print(topics_data)
-        instance.title = validated_data.get('title', instance.title)
-        instance.content = validated_data.get('content', instance.content)
-
-        if topics_data is not None:
-            instance.topics.clear()  # Remove all existing topics
-            for topic_data in topics_data:
-                print(topic_data)
-                topic = Topic.objects.get(uid=topic_data['uid'])
-                instance.topics.add(topic)
-
-        instance.save()
-        return instance
-
-class ListArticleSerializer(serializers.ModelSerializer):
+class DetailArticleSerializer(serializers.ModelSerializer):
     clap_count=serializers.SerializerMethodField()
     comment_count=serializers.SerializerMethodField()
     author = serializers.SerializerMethodField()
 
     class Meta:
         model=Article
-        fields=('uid', 'title','subtitle','image', 'content', 'clap_count', 'comment_count','created_at','author')
+        fields=('uid', 'title','image', 'content' , 'clap_count', 'comment_count','created_at','author','is_premium')
+
         
     def get_comment_count(self, obj):
         return obj.comments.count()    # Ensure 'comments' is the related name
@@ -50,11 +34,52 @@ class ListArticleSerializer(serializers.ModelSerializer):
         return obj.claps.count()    # Ensure 'claps' is the related name
     
     def get_author(self,obj):     
-        return { "id":obj.author.id,"username":obj.author.username }
+        request = self.context.get('request')  # Get the request object from serializer context
+        img_url = obj.author.img.url if obj.author.img else None  # Get the relative image URL
+        # Use request.build_absolute_uri() to get the full URL if the image exists
+        full_img_url = request.build_absolute_uri(img_url) if img_url else None
+
+        return {
+        "id": obj.author.id,
+        "username": obj.author.username,
+        "img": full_img_url,  # Return the full URL of the image
+        }
+
+
+class ListArticleSerializer(serializers.ModelSerializer):
+    clap_count=serializers.SerializerMethodField()
+    comment_count=serializers.SerializerMethodField()
+    author = serializers.SerializerMethodField()
+    summary = serializers.SerializerMethodField()
+
+
+    class Meta:
+        model=Article
+        fields=('uid', 'title','image', 'summary' , 'clap_count', 'comment_count','created_at','author','is_premium')
+
+    def get_summary(self,obj):
+        return " ".join(obj.content.split()[:25])
+        
+    def get_comment_count(self, obj):
+        return obj.comments.count()    # Ensure 'comments' is the related name
+
+    def get_clap_count(self, obj):
+        return obj.claps.count()    # Ensure 'claps' is the related name
+    
+    def get_author(self,obj):     
+        request = self.context.get('request')  # Get the request object from serializer context
+        img_url = obj.author.img.url if obj.author.img else None  # Get the relative image URL
+        # Use request.build_absolute_uri() to get the full URL if the image exists
+        full_img_url = request.build_absolute_uri(img_url) if img_url else None
+
+        return {
+        "id": obj.author.id,
+        "username": obj.author.username,
+        "img": full_img_url,  # Return the full URL of the image
+        }
     
 class CommentSerializer(serializers.ModelSerializer):
     author = serializers.SerializerMethodField()
-
     class Meta:
         model = Comment
         fields = ['author','content','uid','created_at']
@@ -62,11 +87,11 @@ class CommentSerializer(serializers.ModelSerializer):
     def get_author(self,obj):     
         return { "id":obj.author.id,"username":obj.author.username }
     
-class DetailCommentSerializer(serializers.ModelSerializer):
 
+class DetailCommentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Comment
-        fields = ['author','content','article']
+        fields = ['content']
 
 
 class TopicSerializer(serializers.ModelSerializer):
@@ -77,7 +102,8 @@ class TopicSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
-        fields = ('id','username','about')
+        fields = ('id','username','name','about','email','img','pronouns')
+
 
 
 class AuthorSerializer(serializers.ModelSerializer):
@@ -85,7 +111,7 @@ class AuthorSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ('id','username','about','is_following')
+        fields = ('id','username','about','is_following','img')
 
     def get_is_following(self,obj):
         user = self.context.get('user')
@@ -99,3 +125,28 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
         model = SubscriptionPlan
         fields = ['name','duration_days','price','desc','benefits']
 
+
+class FollowSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Follow
+        fields = ['follower','followed']
+        extra_kwargs = {
+            'follower':{'read_only':True}
+        }
+
+
+class ClapSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Clap
+        fields = ['article','user']
+        extra_kwargs = {
+            'user':{'read_only':True}
+        }
+
+class BookmarkSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Bookmark
+        fields = ['article','user']
+        extra_kwargs = {
+            'user':{'read_only':True}
+        }

@@ -5,8 +5,7 @@ from accounts.models import CustomUser
 
 class Topic(BaseModel):
     name = models.CharField(max_length=200)
-
-    def __str__(self):
+    def __str__(self):  
         return self.name
     
     
@@ -18,9 +17,11 @@ class Article(BaseModel):
     content = models.TextField()
     topics = models.ManyToManyField(Topic,related_name='articles')
     is_published = models.BooleanField(default=False)
+    is_premium = models.BooleanField(default=False)
 
     def __str__(self):
         return self.title
+    
 
 class Bookmark(BaseModel):
     user = models.ForeignKey(CustomUser, related_name='bookmarks', on_delete=models.CASCADE)
@@ -29,6 +30,19 @@ class Bookmark(BaseModel):
 
     def __str__(self):
         return f"{self.user.username} bookmarked {self.article.title}"
+
+
+class ReadingHistory(BaseModel):
+    user = models.ForeignKey(CustomUser,on_delete=models.CASCADE)
+    article = models.ForeignKey(Article,on_delete=models.CASCADE)
+    read_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user','article')
+        ordering = ['-read_at']
+
+    def __str__(self):
+        return f'{self.user} read {self.article} on {self.read_at}'
 
     
     
@@ -46,6 +60,7 @@ class Clap(BaseModel):
 
     class Meta:
         unique_together = ('user', 'article')
+
     
 class Follow(BaseModel):
    follower = models.ForeignKey(CustomUser, related_name='following', on_delete=models.CASCADE)

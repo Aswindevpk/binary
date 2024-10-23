@@ -15,8 +15,8 @@ class CustomUser(AbstractUser):
     #is email verified
     is_verified = models.BooleanField(default=False,null=True,blank=True)
     img = models.ImageField(upload_to='profile_images/',null=True,blank=True)
-    pronouns = models.CharField(max_length=10,null=True,blank=True)
-    name = models.CharField(max_length=10,null=True,blank=True)
+    pronouns = models.CharField(max_length=10,blank=True)
+    name = models.CharField(max_length=10,blank=True)
 
     def is_otp_expired(self):
             time_diff = timezone.now() - self.otp_created_at

@@ -22,10 +22,23 @@ class Article(BaseModel):
     def __str__(self):
         return self.title
     
+class ArticleRead(models.Model):
+    user = models.ForeignKey(CustomUser,on_delete=models.CASCADE)
+    article = models.ForeignKey(Article,on_delete=models.CASCADE)
+    read_at = models.DateField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user','article')
+
+    def __str__(self):
+        return f"{self.user.username} read {self.article.title}"
+
+    
 
 class Bookmark(BaseModel):
     user = models.ForeignKey(CustomUser, related_name='bookmarks', on_delete=models.CASCADE)
     article = models.ForeignKey(Article, related_name='bookmarks', on_delete=models.CASCADE)
+    note = models.CharField(max_length=150,null=True,blank=True)
     bookmarked_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

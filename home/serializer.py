@@ -2,19 +2,16 @@ from rest_framework import serializers
 from .models import *
 from accounts.models import *
 
-class ArticleSerializer(serializers.ModelSerializer):
-    topics = serializers.PrimaryKeyRelatedField(queryset=Topic.objects.all(), required=False, allow_null=True, many=True)
 
+
+class CreateArticleTitleContentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Article
-        fields = ['uid','title','subtitle','content','author','image','topics','is_published']
+        fields = ['uid','title','content','author']
         extra_kwargs = {
             'title': {'required': True},
-            'subtitle': {'required': False, 'allow_null': True},
-            'content': {'required': True},
-            'topics': {'required': False, 'allow_null': True},
-            'image': {'required': False, 'allow_null': True},
-            'author': {'required': True},
+            'content': {'required': False},
+            'author': {'read_only':True},
         }
 
 class DetailArticleSerializer(serializers.ModelSerializer):
@@ -45,17 +42,30 @@ class DetailArticleSerializer(serializers.ModelSerializer):
         "img": full_img_url,  # Return the full URL of the image
         }
 
+class ArticleEditSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Article
+        fields = ['uid','title','content','subtitle','image','topics','is_published','is_premium']
+        extra_kwargs = {
+            'image': {'required': False,'allow_null':True},
+            'topics': {'required': False,'allow_null':True},
+        }
+
+class ArticleReadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ArticleRead
+        fields = ['article']
 
 class ListArticleSerializer(serializers.ModelSerializer):
     clap_count=serializers.SerializerMethodField()
     comment_count=serializers.SerializerMethodField()
     author = serializers.SerializerMethodField()
     summary = serializers.SerializerMethodField()
-
+    bookmark_id = serializers.SerializerMethodField()
 
     class Meta:
         model=Article
-        fields=('uid', 'title','image', 'summary' , 'clap_count', 'comment_count','created_at','author','is_premium')
+        fields=('uid', 'title','image', 'summary' , 'clap_count', 'comment_count','created_at','author','is_premium','bookmark_id')
 
     def get_summary(self,obj):
         return " ".join(obj.content.split()[:25])
@@ -78,6 +88,25 @@ class ListArticleSerializer(serializers.ModelSerializer):
         "img": full_img_url,  # Return the full URL of the image
         }
     
+    def get_bookmark_id(self, obj):
+        #Only return note if "include_note" flag is set in the context
+        if self.context.get('include_bookmark',False):
+            request = self.context.get('request')
+            user = request.user if request else None
+
+            if user:
+                try:
+                    bookmark = Bookmark.objects.get(user=user,article=obj)
+                    return bookmark.uid
+                except Bookmark.DoesNotExist:
+                    return None
+        return None
+
+    
+
+    
+
+    
 class CommentSerializer(serializers.ModelSerializer):
     author = serializers.SerializerMethodField()
     class Meta:
@@ -87,12 +116,10 @@ class CommentSerializer(serializers.ModelSerializer):
     def get_author(self,obj):     
         return { "id":obj.author.id,"username":obj.author.username }
     
-
 class DetailCommentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Comment
         fields = ['content']
-
 
 class TopicSerializer(serializers.ModelSerializer):
     class Meta:
@@ -103,8 +130,6 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ('id','username','name','about','email','img','pronouns')
-
-
 
 class AuthorSerializer(serializers.ModelSerializer):
     is_following = serializers.SerializerMethodField()
@@ -119,22 +144,15 @@ class AuthorSerializer(serializers.ModelSerializer):
             return Follow.objects.filter(follower=user,followed=obj.id).exists()
         return False
 
-    
 class SubscriptionPlanSerializer(serializers.ModelSerializer):
     class Meta:
         model = SubscriptionPlan
         fields = ['name','duration_days','price','desc','benefits']
 
 
-class FollowSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Follow
-        fields = ['follower','followed']
-        extra_kwargs = {
-            'follower':{'read_only':True}
-        }
-
-
+"""
+    Reaction on the article
+"""
 class ClapSerializer(serializers.ModelSerializer):
     class Meta:
         model = Clap
@@ -146,7 +164,10 @@ class ClapSerializer(serializers.ModelSerializer):
 class BookmarkSerializer(serializers.ModelSerializer):
     class Meta:
         model = Bookmark
-        fields = ['article','user']
+        fields = ['article','user','note']
         extra_kwargs = {
-            'user':{'read_only':True}
+            'user':{'read_only':True},
+            'note':{'required':False,'allow_null':True}
         }
+
+    

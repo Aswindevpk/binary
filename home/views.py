@@ -1,4 +1,3 @@
-from django.forms import ValidationError
 from .serializer import *
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -10,8 +9,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework import generics
 from rest_framework import viewsets
+from django.shortcuts import get_object_or_404
 
-
+"""
+Article of a specific user
+"""
 class AuthorArticlesView(generics.ListAPIView):
     serializer_class = ListArticleSerializer
 
@@ -19,16 +21,24 @@ class AuthorArticlesView(generics.ListAPIView):
         author_id = self.kwargs['author_id']
         return Article.objects.filter(author__id=author_id)
    
-
+"""
+List and create article
+"""
 class ListArticleView(generics.ListCreateAPIView):
     serializer_class = ListArticleSerializer
+    create_serializer_class = CreateArticleTitleContentSerializer
 
     def get_queryset(self):
         #filtering according to need
         limit = self.request.GET.get("limit")
         topic = self.request.GET.get("topic")
         bookmarked = self.request.GET.get("bookmarked")
+        draft = self.request.GET.get("draft")
 
+        if draft == 'true':
+            return Article.objects.filter(is_published=False,author=self.request.user)
+        if draft == 'false':
+            return Article.objects.filter(is_published=True,author=self.request.user)
         if topic:
             return Article.objects.filter(topics__name=topic,is_published=True).distinct()
         if limit:
@@ -39,23 +49,113 @@ class ListArticleView(generics.ListCreateAPIView):
             return Article.objects.filter(is_published=True,topics__name=topic)[:int(limit)]
         return  Article.objects.filter(is_published=True)[:10]   #here limit the article by 10
 
+    def get_serializer_class(self):
+        # Use different serializer for creation
+        if self.request.method == 'POST':
+            return self.create_serializer_class
+        return self.serializer_class
+
 
     def perform_create(self, serializer):
         author= self.request.user 
         serializer.save(author=author)
 
-
-class ArticleDetailView(generics.RetrieveUpdateDestroyAPIView):
+"""
+Article full data view
+"""
+class ArticleDetailView(generics.RetrieveAPIView):
     queryset = Article.objects.all()
     serializer_class = DetailArticleSerializer
     lookup_field = 'uid'
 
+    def get(self, request,*args,**kwargs):
+        #Fetch the article object using the uid
+        article = get_object_or_404(Article,uid=self.kwargs['uid'])
 
+        #Track the read status if already read or not
+        if request.user.is_authenticated:
+            #Ensure the user and article combination is only save once
+            ArticleRead.objects.get_or_create(user=request.user,article=article)
+
+        #call the original "get" method to return the serialized response
+        return super().get(request,*args,**kwargs)
+
+
+
+
+
+
+"""
+List all article read by the user recently
+"""
+class ArticleReadView(generics.ListAPIView):
+    serializer_class = ListArticleSerializer
+
+    def get_queryset(self):
+        read_articles = ArticleRead.objects.filter(user=self.request.user)
+        #return the article object from the read_article query set
+        return [read.article for read in read_articles]
+
+"""
+Deletes the read article history of the user
+"""
+class DeleteAllReadArticlesView(generics.DestroyAPIView):
+    def delete(self, request, *args, **kwargs):
+        #all articleread entries of logged in user
+        read_articles = ArticleRead.objects.filter(user=request.user)
+
+        #check if any history exist
+        if read_articles.exists():
+            read_articles.delete()
+            return Response({"message": "All read articles have been deleted."}, status=status.HTTP_204_NO_CONTENT)
+        else:
+            return Response({"message": "No read articles found for this user."}, status=status.HTTP_404_NOT_FOUND)
+
+
+
+
+
+"""
+Edit,and Delete Articles
+"""
+class ArticleEditView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Article.objects.all()
+    serializer_class = ArticleEditSerializer
+    lookup_field = 'uid'
+"""
+uploades and track the images in the article content
+"""
+class ImageUploadView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        image_file = request.data.get('image')
+
+        if image_file:
+            uploaded_image = BlogImage.objects.create(image=image_file)
+            image_url = request.build_absolute_uri(uploaded_image.image.url)
+            return Response({'imageUrl': image_url}, status=status.HTTP_201_CREATED)
+        else:
+            return Response({'error': 'No image file provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+
+
+
+"""
+    Author full data view
+"""
 class AuthorDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = CustomUser.objects.all()
     serializer_class = UserSerializer
     lookup_field = 'id'
 
+
+"""
+checks if user follow the give user
+"""
 class IsFollowingAuthorView(APIView):
 
     def get(self,request, uid):
@@ -70,58 +170,20 @@ class IsFollowingAuthorView(APIView):
             {'is_following':is_following},status=status.HTTP_200_OK
         )
 
+"""
+List all authors
+"""
 class ListAuthorView(generics.ListAPIView):
     queryset = CustomUser.objects.all()
     serializer_class = AuthorSerializer
 
 
-#all topic view create,delete,update etc
-class TopicView(viewsets.ModelViewSet):
-    serializer_class = TopicSerializer
-    queryset = Topic.objects.all()
 
-#follow a user
-class FollowUserView(generics.CreateAPIView):
-    serializer_class = FollowSerializer
 
-    def create(self, request, *args, **kwargs):
-        followed_user_id = self.kwargs['uid']
-        try:
-            followed_user = CustomUser.objects.get(id=followed_user_id)
-        except CustomUser.DoesNotExist:
-            return Response({"error":"user not found."},status=status.HTTP_404_NOT_FOUND)
-        
-        follow_relation ,created = Follow.objects.get_or_create(
-            follower=request.user,
-            followed=followed_user
-        )
 
-        if created:
-            return Response({"message":"You are now following this user."},status=status.HTTP_201_CREATED)
-        else:
-            return Response({"message":"You are already following this user."},status=status.HTTP_200_OK)
-        
-#unfollow a user
-class UnfollowUserView(generics.DestroyAPIView):
-    serializer_class = FollowSerializer
-
-    def delete(self, request, *args, **kwargs):
-        followed_user_id = self.kwargs['uid']
-        try:
-            followed_user = CustomUser.objects.get(id=followed_user_id)
-        except CustomUser.DoesNotExist:
-            return Response({"error":"user not found."},status=status.HTTP_404_NOT_FOUND)
-        
-        try:
-            follow_relation = Follow.objects.get(
-                follower=request.user,
-                followed=followed_user
-            )
-            follow_relation.delete()
-            return Response({"message":"You have Unfollowed this user."},status=status.HTTP_204_NO_CONTENT)
-        except Follow.DoesNotExist:
-            return Response({"message":"You are not following this user."},status=status.HTTP_400_BAD_REQUEST)
-        
+"""
+    clap on a article
+"""
 class ArticleClapView(generics.CreateAPIView):
     serializer_class = ClapSerializer
 
@@ -142,8 +204,23 @@ class ArticleClapView(generics.CreateAPIView):
         else:
             return Response({"message":"You are already claped this article."},status=status.HTTP_200_OK)
 
+
+
+
+"""
+Edit the bookmarked article notes
+"""
+class EditArticleBookmarkView(generics.RetrieveUpdateAPIView):
+    queryset = Bookmark.objects.all()
+    serializer_class = BookmarkSerializer
+    lookup_field = 'uid'
+
+
+"""
+    Bookmarks an article and list it
+"""
 class ArticleBookmarkView(generics.CreateAPIView):
-    serializer_class = ClapSerializer
+    serializer_class = BookmarkSerializer
 
     def create(self, request, *args, **kwargs):
         article_id = self.kwargs['uid']
@@ -163,8 +240,27 @@ class ArticleBookmarkView(generics.CreateAPIView):
             return Response({"message":"You have already bookmarked this article."},status=status.HTTP_200_OK)
 
 
+class ListArticleBookmarkView(generics.ListAPIView):
+    serializer_class = ListArticleSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        # filtering article bookmarked by the user 
+        return Article.objects.filter(bookmarks__user=user)
+    
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['include_bookmark'] = True  # Include the 'note' field in the serializer
+        return context
 
 
+
+
+
+
+"""
+    list article specific comments
+"""
 class ListCommentView(generics.ListCreateAPIView):
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -188,29 +284,16 @@ class ListCommentView(generics.ListCreateAPIView):
         # Save the comment with the article linked to it 
         serializer.save(article=article,author=commenter)
 
-class UserFollowStatsView(APIView):
-
-    def get(self,request,*args,**kwargs):
-        user_id = kwargs.get('uid')
-        try:
-            user = CustomUser.objects.get(id=user_id)
-        except CustomUser.DoesNotExist:
-             return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
-        
-        #count the number of followers
-        followers_count = Follow.objects.filter(followed=user).count()
-
-        #count the number of following
-        following_count = Follow.objects.filter(follower=user).count()
-
-        return Response({
-            "user_id": user_id,
-            "followers_count": followers_count,
-            "following_count": following_count
-        })
 
 
 
+
+
+
+
+"""
+List plans available
+"""
 class PlansView(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
@@ -223,17 +306,9 @@ class PlansView(APIView):
             "data": serializer.data
         }, status=status.HTTP_200_OK)
     
-
-class ImageUploadView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, *args, **kwargs):
-        image_file = request.data.get('image')
-
-        if image_file:
-            uploaded_image = BlogImage.objects.create(image=image_file)
-            image_url = request.build_absolute_uri(uploaded_image.image.url)
-            return Response({'imageUrl': image_url}, status=status.HTTP_201_CREATED)
-        else:
-            return Response({'error': 'No image file provided'}, status=status.HTTP_400_BAD_REQUEST)
+"""
+    all topic view create,delete,update etc
+"""
+class TopicView(viewsets.ModelViewSet):
+    serializer_class = TopicSerializer
+    queryset = Topic.objects.all()

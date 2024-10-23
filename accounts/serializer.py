@@ -237,6 +237,14 @@ class UserSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = ('id','username','name','about','email','img','pronouns')
 
+from home.models import Follow
+class FollowSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Follow
+        fields = ['follower','followed']
+        extra_kwargs = {
+            'follower':{'read_only':True}
+        }
 
 
 

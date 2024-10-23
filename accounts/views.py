@@ -136,10 +136,8 @@ class PasswordResetConfirmView(APIView):
 """
     user data editing realted views
 """
-
 from rest_framework import generics
 from rest_framework_simplejwt.authentication import JWTAuthentication
-
 class ProfileView(generics.RetrieveUpdateAPIView):
     queryset = CustomUser.objects.all()
     serializer_class = UserSerializer
@@ -149,6 +147,75 @@ class ProfileView(generics.RetrieveUpdateAPIView):
     def get_object(self):
         # Return the currently logged-in user
         return self.request.user
+
+
+"""
+    User Follow related views
+"""
+from home.models import Follow
+class FollowUserView(generics.CreateAPIView):
+    serializer_class = FollowSerializer
+
+    def create(self, request, *args, **kwargs):
+        followed_user_id = self.kwargs['uid']
+        try:
+            followed_user = CustomUser.objects.get(id=followed_user_id)
+        except CustomUser.DoesNotExist:
+            return Response({"error":"user not found."},status=status.HTTP_404_NOT_FOUND)
+        
+        follow_relation ,created = Follow.objects.get_or_create(
+            follower=request.user,
+            followed=followed_user
+        )
+
+        if created:
+            return Response({"message":"You are now following this user."},status=status.HTTP_201_CREATED)
+        else:
+            return Response({"message":"You are already following this user."},status=status.HTTP_200_OK)
+        
+#unfollow a user
+class UnfollowUserView(generics.DestroyAPIView):
+    serializer_class = FollowSerializer
+
+    def delete(self, request, *args, **kwargs):
+        followed_user_id = self.kwargs['uid']
+        try:
+            followed_user = CustomUser.objects.get(id=followed_user_id)
+        except CustomUser.DoesNotExist:
+            return Response({"error":"user not found."},status=status.HTTP_404_NOT_FOUND)
+        
+        try:
+            follow_relation = Follow.objects.get(
+                follower=request.user,
+                followed=followed_user
+            )
+            follow_relation.delete()
+            return Response({"message":"You have Unfollowed this user."},status=status.HTTP_204_NO_CONTENT)
+        except Follow.DoesNotExist:
+            return Response({"message":"You are not following this user."},status=status.HTTP_400_BAD_REQUEST)
+       
+class UserFollowStatsView(APIView):
+
+    def get(self,request,*args,**kwargs):
+        user_id = kwargs.get('uid')
+        try:
+            user = CustomUser.objects.get(id=user_id)
+        except CustomUser.DoesNotExist:
+             return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+        
+        #count the number of followers
+        followers_count = Follow.objects.filter(followed=user).count()
+
+        #count the number of following
+        following_count = Follow.objects.filter(follower=user).count()
+
+        return Response({
+            "user_id": user_id,
+            "followers_count": followers_count,
+            "following_count": following_count
+        })
+
+
 
 
 
@@ -216,7 +283,7 @@ class VerifyPaymentAPIView(APIView):
             return Response({'status': 'Payment verification failed', 'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({'status': 'An error occurred', 'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-# authentication and related 
+
 
 
 

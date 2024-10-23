@@ -11,4 +11,5 @@ admin.site.register(Clap)
 admin.site.register(Follow)
 admin.site.register(BlogImage)
 admin.site.register(Bookmark)
+admin.site.register(ArticleRead)
 

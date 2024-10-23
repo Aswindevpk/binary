@@ -16,8 +16,12 @@ urlpatterns = [
     #profile updation
     path('profile/',ProfileView.as_view(),name='user_profile'),
 
+    #user actions
+    path('<str:uid>/follow/',FollowUserView.as_view(),name='follow_user'),
+    path('<str:uid>/unfollow/',UnfollowUserView.as_view(),name='unfollow_user'),
+    path('<str:uid>/follow-stats/',UserFollowStatsView.as_view(),name='user_follow-stats'),
+
     #payment
     path('create_order/', CreateOrderAPIView.as_view(), name='create_order'),
     path('verify_payment/', VerifyPaymentAPIView.as_view(), name='verify_payment'),
-    path('follow-count/', VerifyPaymentAPIView.as_view(), name='follow_count'),
 ]

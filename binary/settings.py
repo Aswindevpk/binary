@@ -28,7 +28,7 @@ SECRET_KEY = 'django-insecure-du2n8iq@xw!ry4up-eca6&h%b(30(cf6!%#0a97g69s7@z_7nq
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["localhost"]
+ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -211,8 +211,11 @@ CORS_ORIGIN_ALLOW_ALL = True
 
 CORS_ORIGIN_WHITELIST = [
     'http://localhost:3000',  # React development server
+    "http://192.168.1.3:3000"
 ]
 
+# For development, to allow all
+CORS_ALLOW_ALL_ORIGINS = True
 
 # URL for frontend password reset link
 FRONTEND_URL = 'http://localhost:3000'

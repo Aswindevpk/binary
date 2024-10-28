@@ -221,14 +221,17 @@ class EditArticleBookmarkView(generics.RetrieveUpdateAPIView):
 """
 class ArticleBookmarkView(generics.CreateAPIView):
     serializer_class = BookmarkSerializer
+    permission_classes = [IsAuthenticated]
 
     def create(self, request, *args, **kwargs):
         article_id = self.kwargs['uid']
+
         try:
             article = Article.objects.get(uid=article_id)
         except CustomUser.DoesNotExist:
             return Response({"error":"article not found."},status=status.HTTP_404_NOT_FOUND)
         
+        #Toggle bookmark: create if absent, delete if exists
         bookmark_article ,created = Bookmark.objects.get_or_create(
             user=request.user,
             article=article
@@ -236,8 +239,11 @@ class ArticleBookmarkView(generics.CreateAPIView):
 
         if created:
             return Response({"message":"You have bookmarked this article."},status=status.HTTP_201_CREATED)
-        else:
-            return Response({"message":"You have already bookmarked this article."},status=status.HTTP_200_OK)
+        if bookmark_article:
+            #if already exists delete the bookmark
+            bookmark_article.delete()
+            return Response({"message":"Removed from bookmarks"},status=status.HTTP_200_OK)
+
 
 
 class ListArticleBookmarkView(generics.ListAPIView):

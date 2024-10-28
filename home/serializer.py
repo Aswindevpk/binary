@@ -18,12 +18,20 @@ class DetailArticleSerializer(serializers.ModelSerializer):
     clap_count=serializers.SerializerMethodField()
     comment_count=serializers.SerializerMethodField()
     author = serializers.SerializerMethodField()
+    is_bookmarked = serializers.SerializerMethodField()
+
+
 
     class Meta:
         model=Article
-        fields=('uid', 'title','image', 'content' , 'clap_count', 'comment_count','created_at','author','is_premium')
+        fields=('uid', 'title','image','subtitle', 'content' , 'clap_count', 'comment_count','created_at','author','is_premium','is_bookmarked')
 
-        
+    def get_is_bookmarked(self,obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return obj.bookmarks.filter(user=request.user).exists()
+        return False
+
     def get_comment_count(self, obj):
         return obj.comments.count()    # Ensure 'comments' is the related name
 
@@ -49,6 +57,7 @@ class ArticleEditSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'image': {'required': False,'allow_null':True},
             'topics': {'required': False,'allow_null':True},
+            "content":{'required': False,'allow_null':True},
         }
 
 class ArticleReadSerializer(serializers.ModelSerializer):
@@ -62,13 +71,20 @@ class ListArticleSerializer(serializers.ModelSerializer):
     author = serializers.SerializerMethodField()
     summary = serializers.SerializerMethodField()
     bookmark_id = serializers.SerializerMethodField()
+    is_bookmarked = serializers.SerializerMethodField()
 
     class Meta:
         model=Article
-        fields=('uid', 'title','image', 'summary' , 'clap_count', 'comment_count','created_at','author','is_premium','bookmark_id')
+        fields=('uid', 'title','image', 'summary' , 'clap_count', 'comment_count','created_at','author','is_premium','bookmark_id','subtitle','is_bookmarked')
 
     def get_summary(self,obj):
         return " ".join(obj.content.split()[:25])
+    
+    def get_is_bookmarked(self,obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return obj.bookmarks.filter(user=request.user).exists()
+        return False
         
     def get_comment_count(self, obj):
         return obj.comments.count()    # Ensure 'comments' is the related name
@@ -139,7 +155,8 @@ class AuthorSerializer(serializers.ModelSerializer):
         fields = ('id','username','about','is_following','img')
 
     def get_is_following(self,obj):
-        user = self.context.get('user')
+        request = self.context.get('request')
+        user = request.user if request else None
         if user:
             return Follow.objects.filter(follower=user,followed=obj.id).exists()
         return False

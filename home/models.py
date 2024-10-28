@@ -22,6 +22,8 @@ class Article(BaseModel):
     def __str__(self):
         return self.title
     
+
+    
 class ArticleRead(models.Model):
     user = models.ForeignKey(CustomUser,on_delete=models.CASCADE)
     article = models.ForeignKey(Article,on_delete=models.CASCADE)

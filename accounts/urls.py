@@ -21,6 +21,10 @@ urlpatterns = [
     path('<str:uid>/unfollow/',UnfollowUserView.as_view(),name='unfollow_user'),
     path('<str:uid>/follow-stats/',UserFollowStatsView.as_view(),name='user_follow-stats'),
 
+    #following and followers details
+     path('<str:uid>/followings/',UserFollowings.as_view(),name='unfollow_user'),
+     path('<str:uid>/followers/',UserFollowers.as_view(),name='unfollow_user'),
+
     #payment
     path('create_order/', CreateOrderAPIView.as_view(), name='create_order'),
     path('verify_payment/', VerifyPaymentAPIView.as_view(), name='verify_payment'),

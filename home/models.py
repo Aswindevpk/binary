@@ -1,6 +1,7 @@
 from django.db import models
 from accounts.models import BaseModel
 from accounts.models import CustomUser 
+from django.db.models import Q
 
 
 class Topic(BaseModel):
@@ -27,7 +28,7 @@ class Article(BaseModel):
 class ArticleRead(models.Model):
     user = models.ForeignKey(CustomUser,on_delete=models.CASCADE)
     article = models.ForeignKey(Article,on_delete=models.CASCADE)
-    read_at = models.DateField(auto_now_add=True)
+    read_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = ('user','article')
@@ -81,8 +82,13 @@ class Follow(BaseModel):
    follower = models.ForeignKey(CustomUser, related_name='following', on_delete=models.CASCADE)
    followed = models.ForeignKey(CustomUser, related_name='followers', on_delete=models.CASCADE)
 
+
+
    class Meta:
-        unique_together = ('follower', 'followed')
+        constraints = [
+            models.UniqueConstraint(fields=['follower', 'followed'], name='unique_follow'),
+            models.CheckConstraint(check=~Q(follower=models.F('followed')), name='prevent_self_follow'),
+        ]
 
 
 class BlogImage(models.Model):

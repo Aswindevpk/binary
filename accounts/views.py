@@ -195,7 +195,6 @@ class UnfollowUserView(generics.DestroyAPIView):
             return Response({"message":"You are not following this user."},status=status.HTTP_400_BAD_REQUEST)
        
 class UserFollowStatsView(APIView):
-
     def get(self,request,*args,**kwargs):
         user_id = kwargs.get('uid')
         try:
@@ -215,8 +214,23 @@ class UserFollowStatsView(APIView):
             "following_count": following_count
         })
 
+class UserFollowings(generics.ListAPIView):
+    serializer_class = UserSerializer
 
+    def get_queryset(self):
+        user_id = self.kwargs['uid']
+        following_list = Follow.objects.filter(follower_id = user_id)
+        following_users = [follow.followed for follow in following_list]
+        return following_users
+        
+class UserFollowers(generics.ListAPIView):
+    serializer_class = UserSerializer
 
+    def get_queryset(self):
+        user_id = self.kwargs['uid']
+        followers = Follow.objects.filter(followed_id = user_id)
+        follower_users = [follow.follower for follow in followers]
+        return follower_users
 
 
 class CreateOrderAPIView(APIView):

@@ -118,9 +118,7 @@ class ListArticleSerializer(serializers.ModelSerializer):
                     return None
         return None
 
-    
 
-    
 
     
 class CommentSerializer(serializers.ModelSerializer):
@@ -129,8 +127,13 @@ class CommentSerializer(serializers.ModelSerializer):
         model = Comment
         fields = ['author','content','uid','created_at']
 
-    def get_author(self,obj):     
-        return { "id":obj.author.id,"username":obj.author.username }
+    def get_author(self,obj):   
+        request = self.context.get('request') 
+        img_url = obj.author.img.url if obj.author.img else None  # Get the relative image URL
+        # Use request.build_absolute_uri() to get the full URL if the image exists
+        full_img_url = request.build_absolute_uri(img_url) if img_url else None  
+
+        return { "id":obj.author.id,"username":obj.author.username,'img':full_img_url }
     
 class DetailCommentSerializer(serializers.ModelSerializer):
     class Meta:

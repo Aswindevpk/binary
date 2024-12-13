@@ -52,7 +52,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         user.save()
 
         # senting the created otp to user email 
-        # send_otp_email(email=validated_data['email'],otp=otp)
+        send_otp_email(email=validated_data['email'],otp=user.otp)
         return user
     
 from django.contrib.auth import authenticate
@@ -105,6 +105,7 @@ class VerifyOtpSerializer(serializers.Serializer):
         if otp:
             if len(otp) != 6 :
                 raise serializers.ValidationError({"otp":"otp should be 6 digits."})
+        
         try:
             #status variable for verification
             is_verified = False
@@ -148,6 +149,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 from django.conf import settings
+from django.core.mail import send_mail
 class PasswordResetRequestSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
@@ -176,19 +178,14 @@ class PasswordResetRequestSerializer(serializers.Serializer):
 
         # Build the password reset URL for the frontend app
         reset_url = f"{settings.FRONTEND_URL}/reset-password/{uid}/{token}/"
-        print(reset_url)
 
-
-        # senting the link to user email 
-        # send_otp_email(email=validated_data['email'],otp=otp)
-
-               # Send password reset email
-        # send_mail(
-        #     subject="Password Reset Request",
-        #     message=f"Click the link to reset your password: {reset_url}",
-        #     from_email=settings.DEFAULT_FROM_EMAIL,
-        #     recipient_list=[email],
-        # )
+        # Send password reset email
+        send_mail(
+            subject="Password Reset Request",
+            message=f"Click the link to reset your password: {reset_url}",
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[email],
+        )
 
 from django.utils.http import urlsafe_base64_decode
 class PasswordResetConfirmSerializer(serializers.Serializer):

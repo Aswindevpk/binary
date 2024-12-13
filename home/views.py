@@ -19,7 +19,7 @@ class AuthorArticlesView(generics.ListAPIView):
 
     def get_queryset(self):
         author_id = self.kwargs['author_id']
-        return Article.objects.filter(author__id=author_id)
+        return Article.objects.filter(author__id=author_id,is_published=True).order_by('-created_at')
    
 """
 List and create article
@@ -36,18 +36,18 @@ class ListArticleView(generics.ListCreateAPIView):
         draft = self.request.GET.get("draft")
 
         if draft == 'true':
-            return Article.objects.filter(is_published=False,author=self.request.user)
+            return Article.objects.filter(is_published=False,author=self.request.user).order_by('-created_at')
         if draft == 'false':
-            return Article.objects.filter(is_published=True,author=self.request.user)
+            return Article.objects.filter(is_published=True,author=self.request.user).order_by('-created_at')
         if topic:
-            return Article.objects.filter(topics__name=topic,is_published=True).distinct()
+            return Article.objects.filter(topics__name=topic,is_published=True).distinct().order_by('-created_at')
         if limit:
-            return Article.objects.filter(is_published=True)[:int(limit)]
+            return Article.objects.filter(is_published=True).order_by('-created_at')[:int(limit)]
         if bookmarked:
-            return Article.objects.filter(bookmarks__user=self.request.user)
+            return Article.objects.filter(bookmarks__user=self.request.user).order_by('-created_at')
         if topic and limit:
-            return Article.objects.filter(is_published=True,topics__name=topic)[:int(limit)]
-        return  Article.objects.filter(is_published=True)[:10]   #here limit the article by 10
+            return Article.objects.filter(is_published=True,topics__name=topic).order_by('-created_at')[:int(limit)]
+        return  Article.objects.filter(is_published=True).order_by('-created_at')[:10]   #here limit the article by 10
 
     def get_serializer_class(self):
         # Use different serializer for creation
@@ -92,7 +92,7 @@ class ArticleReadView(generics.ListAPIView):
     serializer_class = ListArticleSerializer
 
     def get_queryset(self):
-        read_articles = ArticleRead.objects.filter(user=self.request.user)
+        read_articles = ArticleRead.objects.filter(user=self.request.user).order_by('-read_at')
         #return the article object from the read_article query set
         return [read.article for read in read_articles]
 
@@ -154,7 +154,7 @@ class AuthorDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 """
-checks if user follow the give user
+checks if user follow the given user
 """
 class IsFollowingAuthorView(APIView):
 
@@ -174,8 +174,13 @@ class IsFollowingAuthorView(APIView):
 List all authors
 """
 class ListAuthorView(generics.ListAPIView):
-    queryset = CustomUser.objects.all()
     serializer_class = AuthorSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Exclude the current logged-in user
+        print(CustomUser.objects.exclude(id=self.request.user.id))
+        return CustomUser.objects.exclude(id=self.request.user.id)
 
 
 
@@ -275,7 +280,7 @@ class ListCommentView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         id = self.kwargs['id']
-        return Comment.objects.filter(article__uid = id)
+        return Comment.objects.filter(article__uid = id).order_by('-created_at')
  
     def perform_create(self, serializer):
         #get the article using passed id
